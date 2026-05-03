@@ -177,12 +177,9 @@ def main():
                         <div style="margin-top:6px;">
                             <span class="score-tag">Score: {r['score']:.4f}</span>
                         </div>
-                        <div class="rec-link" style="margin-top:6px;">
-                            {'<a href="'+r['url']+'" target="_blank">🔗 Open Paper</a>' if r['url'] != 'N/A' else ''}
-                        </div>
+                       {'<div class="rec-link" style="margin-top:6px;"><a href="'+r['url']+'" target="_blank">🔗 Open Paper</a></div>' if r['url'] != 'N/A' else ''}
                     </div>
                     """, unsafe_allow_html=True)
-
     with tabs[1]:
         st.write("Visualize paper graph relationships.")
         if st.button("🌐 Build Graph"):
