@@ -14,7 +14,10 @@ def reconstruct_abstract(inv_index):
     return " ".join([w for _, w in words])
 
 
-def fetch_papers(query=None, limit=50, dataset_path="papers.json"):
+def fetch_papers(query=None, limit=50, dataset_path="papers.json", embeddings_path="paper_embeddings.pt"):
+    import torch
+    import torch.nn.functional as F
+    from sentence_transformers import SentenceTransformer
 
     if not os.path.exists(dataset_path):
         raise FileNotFoundError("Dataset file papers.json not found")
@@ -25,19 +28,29 @@ def fetch_papers(query=None, limit=50, dataset_path="papers.json"):
     if query is None:
         return papers[:limit]
 
+    # Dense retrieval — encode query and compare with precomputed embeddings
+    if os.path.exists(embeddings_path):
+        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        q_emb = torch.tensor(model.encode([query])[0], dtype=torch.float)
+        q_emb = F.normalize(q_emb.unsqueeze(0), dim=1)
+
+        paper_emb = torch.load(embeddings_path, map_location="cpu")
+        paper_emb = F.normalize(paper_emb, dim=1)
+
+        scores = torch.mv(paper_emb, q_emb.squeeze())
+        top_indices = torch.topk(scores, k=min(limit, len(papers))).indices.tolist()
+        return [papers[i] for i in top_indices]
+
+    # Fallback to keyword search if embeddings not available
     query = query.lower()
     results = []
-
     for p in papers:
         title = (p.get("title") or "").lower()
         abstract = reconstruct_abstract(p.get("abstract")).lower()
-
         if query in title or query in abstract:
             results.append(p)
-
         if len(results) >= limit:
             break
-
     return results
 
 
