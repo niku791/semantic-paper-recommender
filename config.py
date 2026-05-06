@@ -2,7 +2,7 @@ import torch
 
 params = {
     "dataset": "openalex",
-    "subset_size": 10000,
+    "subset_size": 5000,
     "st_dim": 384,
     "semantic_proj_dim": 128,
     "attn_dim": 64,
