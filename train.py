@@ -14,9 +14,10 @@ def load_dataset():
     return works
 
 
-def load_embeddings(device):
+def load_embeddings(n, device):
     print("Loading precomputed embeddings...")
     paper_emb = torch.load("paper_embeddings.pt", map_location=device)
+    paper_emb = paper_emb[:n]
     print("Embedding shape:", paper_emb.shape)
     return paper_emb
 
@@ -24,10 +25,8 @@ def load_embeddings(device):
 def contrastive_loss(fused_items, all_neighbors, device, temperature=0.1):
     n = fused_items.shape[0]
     sim = torch.matmul(fused_items, fused_items.T) / temperature
-
     total_loss = torch.tensor(0.0, device=device)
     count = 0
-
     for i in range(n):
         pos_idx = list(all_neighbors.get(i, set()) - {i})
         if len(pos_idx) == 0:
@@ -36,24 +35,17 @@ def contrastive_loss(fused_items, all_neighbors, device, temperature=0.1):
         log_probs = F.log_softmax(sim[i], dim=0)
         total_loss = total_loss - log_probs[pos_idx].mean()
         count += 1
-
     return total_loss / max(count, 1)
 
 
 def train_model(query=None):
-
     device = params["device"]
-
     works = load_dataset()
-    paper_emb = load_embeddings(device)
+    paper_emb = load_embeddings(len(works), device)
 
-    (
-        pap_neighbors,
-        pvp_neighbors,
-        pyp_neighbors,
-        pkp_neighbors,
-        pcp_neighbors
-    ) = build_meta_path_adjs(works)
+    (pap_neighbors, pvp_neighbors,
+     pyp_neighbors, pkp_neighbors,
+     pcp_neighbors) = build_meta_path_adjs(works)
 
     all_neighbors = {}
     for i in range(len(works)):
@@ -72,9 +64,7 @@ def train_model(query=None):
     ag_pcp = SemanticAggregator(params["st_dim"], params["semantic_proj_dim"]).to(device)
 
     fused_dim = params["semantic_proj_dim"] * params["L"]
-
     proj_identity = nn.Linear(params["st_dim"], fused_dim).to(device)
-
     fusion = SemanticFusion(fused_dim, params["attn_dim"]).to(device)
 
     optimizer = torch.optim.Adam(
@@ -89,7 +79,6 @@ def train_model(query=None):
     )
 
     for epoch in range(params["epochs"]):
-
         optimizer.zero_grad()
 
         E_pap = aggregate_meta_path(works, paper_emb, pap_neighbors, ag_pap, L=params["L"])
@@ -104,7 +93,6 @@ def train_model(query=None):
         fused_items = F.normalize(fused_items, dim=1)
 
         loss = contrastive_loss(fused_items, all_neighbors, device)
-
         loss.backward()
         optimizer.step()
 
