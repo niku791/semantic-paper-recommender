@@ -28,20 +28,16 @@ def fetch_papers(query=None, limit=50, dataset_path="papers.json", embeddings_pa
     if query is None:
         return papers[:limit]
 
-    # Dense retrieval — encode query and compare with precomputed embeddings
     if os.path.exists(embeddings_path):
         model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         q_emb = torch.tensor(model.encode([query])[0], dtype=torch.float)
         q_emb = F.normalize(q_emb.unsqueeze(0), dim=1)
-
         paper_emb = torch.load(embeddings_path, map_location="cpu")
         paper_emb = F.normalize(paper_emb, dim=1)
-
         scores = torch.mv(paper_emb, q_emb.squeeze())
         top_indices = torch.topk(scores, k=min(limit, len(papers))).indices.tolist()
         return [papers[i] for i in top_indices]
 
-    # Fallback to keyword search if embeddings not available
     query = query.lower()
     results = []
     for p in papers:
@@ -54,11 +50,10 @@ def fetch_papers(query=None, limit=50, dataset_path="papers.json", embeddings_pa
     return results
 
 
-def build_meta_path_adjs(works):
+def build_meta_path_adjs(works, max_keyword_papers=10):
 
     author_to_papers   = defaultdict(list)
     venue_to_papers    = defaultdict(list)
-    year_to_papers     = defaultdict(list)
     keyword_to_papers  = defaultdict(list)
     id_to_index        = {}
 
@@ -75,9 +70,6 @@ def build_meta_path_adjs(works):
         venue = w.get("venue")
         if venue:
             venue_to_papers[venue].append(i)
-        year = w.get("year")
-        if year:
-            year_to_papers[year].append(i)
         for c in w.get("concepts", []):
             keyword_to_papers[c].append(i)
 
@@ -95,13 +87,13 @@ def build_meta_path_adjs(works):
         for p in papers:
             pvp_neighbors[p].update(papers)
 
-    for papers in year_to_papers.values():
-        for p in papers:
-            pyp_neighbors[p].update(papers)
+    # PYP removed — year is too generic
 
-    for papers in keyword_to_papers.values():
-        for p in papers:
-            pkp_neighbors[p].update(papers)
+    # only specific concepts shared by fewer than max_keyword_papers
+    for concept, papers in keyword_to_papers.items():
+        if len(papers) <= max_keyword_papers:
+            for p in papers:
+                pkp_neighbors[p].update(papers)
 
     for i, w in enumerate(works):
         for ref in w.get("references", []):
